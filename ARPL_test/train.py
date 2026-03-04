@@ -21,7 +21,7 @@ def train(net, criterion, optimizer, trainloader, epoch=None, **options):
         
         with torch.set_grad_enabled(True):
             optimizer.zero_grad() 
-            x, y = net(data, True)
+            x, y = net(data, True, labels)
             logits, loss = criterion(x, y, labels)
             loss.backward()
             optimizer.step()
