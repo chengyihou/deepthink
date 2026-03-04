@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 
 
 class HRRP_Dataset(Dataset):
-    def __init__ (self, data, targets, transform=None):
+    def __init__ (self, data, targets, transform=None): #666
         self.data = data # 引用变量给类变量 
         self.targets = targets
         self.transform = transform
