@@ -23,6 +23,7 @@ class ArcMarginProduct(nn.Module):
         if label is None:
             return F.linear(features, self.weight)
 
+        # 传标签的情况
         cosine = F.linear(F.normalize(features), F.normalize(self.weight))
         sine = torch.sqrt(torch.clamp(1.0 - cosine.pow(2), min=1e-7))
         phi = cosine * self.cos_m - sine * self.sin_m

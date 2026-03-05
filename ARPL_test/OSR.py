@@ -61,6 +61,8 @@ parser.add_argument("--loss", type=str, default="Softmax")
 parser.add_argument("--eval", action="store_true", default=False)
 
 
+
+# Function to build model
 def build_model(options):
     if options["model"] == "NSRFF":
         net = NS_CLF_L2Softmax(
@@ -71,13 +73,15 @@ def build_model(options):
             arc_s=options["arc_s"],
             arc_m=options["arc_m"],
         )
-        feat_dim = options["z_dim"]
+        feat_dim = options["z_dim"] # 特征维度
     else:
         net = ConvNet(num_classes=options["num_classes"])
         feat_dim = 64
     return net, feat_dim
 
 
+
+# Main function
 def main_worker(options):
     torch.manual_seed(options["seed"])
     os.environ["CUDA_VISIBLE_DEVICES"] = options["gpu"]
@@ -90,6 +94,9 @@ def main_worker(options):
     else:
         print("Currently using CPU")
 
+
+
+    # Dataset
     print(f"{options['dataset']} Preparation")
     data = HRRP_OSR(
         known=options["known"],
@@ -100,18 +107,26 @@ def main_worker(options):
     )
     trainloader, testloader, outloader = data.train_loader, data.test_loader, data.out_loader
     options["num_classes"] = data.num_classes
-
     print(f"Creating model: {options['model']}")
     net, feat_dim = build_model(options)
 
+
+
+    # Loss function
     options.update({"feat_dim": feat_dim, "use_gpu": use_gpu})
     loss_module = importlib.import_module("loss." + options["loss"])
     criterion = getattr(loss_module, options["loss"])(**options)
 
+
+
+    # Move to GPU if available
     if use_gpu:
         net = nn.DataParallel(net).cuda()
         criterion = criterion.cuda()
 
+
+
+    # Create directory for saving models
     model_path = os.path.join(options["outf"], "models", options["dataset"])
     os.makedirs(model_path, exist_ok=True)
     file_name = (
@@ -120,6 +135,9 @@ def main_worker(options):
         f"_s{options['arc_s']}_m{options['arc_m']}"
     )
 
+
+
+    # Evaluation
     if options["eval"]:
         net, criterion = load_networks(net, model_path, file_name, criterion=criterion)
         results = test_1(net, criterion, testloader, outloader, epoch=0, **options)
@@ -136,10 +154,16 @@ def main_worker(options):
         )
         return results
 
+
+
+    # Optimizer and Scheduler
     params_list = [{"params": net.parameters()}, {"params": criterion.parameters()}]
     optimizer = torch.optim.SGD(params_list, lr=options["lr"], momentum=0.9, weight_decay=1e-4)
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60, 90, 120])
 
+
+
+    # Training and Evaluation
     start_time = time.time()
     results = None
     for epoch in range(options["max_epoch"]):

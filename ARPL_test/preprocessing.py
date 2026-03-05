@@ -9,7 +9,7 @@ def _complex_mul(x, y):
 
 
 def _complex_exp(theta):
-    return torch.stack([torch.cos(theta), torch.sin(theta)], dim=-1)
+    return torch.stack([torch.cos(theta), torch.sin(theta)], dim=-1) # e^(iθ)
 
 
 def freq_compensation(segment, freq, PROCESS_SAMPLING_RATE):
