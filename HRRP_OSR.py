@@ -2,28 +2,28 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
+from pathlib import Path
 
 
 
 class HRRP_Dataset(Dataset):
-    def __init__(self, data, targets, model = "ConvNet", seq_len = 1280, transform = None):
+    def __init__(self, data, targets, model = "NSRFF", seq_len = 4096, transform = None):
         self.targets = targets
         self.transform = transform
         self.model = model
         self.seq_len = seq_len # length
-        tensor = torch.from_numpy(data).float()
+
+        tensor = torch.from_numpy(data).float()   # data shape: (N, 8192)
 
         if model == "NSRFF":
-            expected_cols = 2 * seq_len # 2560
-            if tensor.size(1) != expected_cols:
-                raise ValueError(
-                    f"NSRFF input expects {expected_cols} columns (2*seq_len), got {tensor.size(1)}."
-                )
-            tensor = tensor.view(-1, seq_len, 2).unsqueeze(1) # (N, 1, T, 2)
+            real = tensor[:, :seq_len]            # (N, 4096)
+            imag = tensor[:, seq_len:]            # (N, 4096)
+            tensor = torch.stack([real, imag], dim=-1)   # (N, 4096, 2)
+            tensor = tensor.unsqueeze(1)                # (N, 1, 4096, 2)
         else:
             tensor = tensor.unsqueeze(1)
 
-        self.data = tensor
+        self.data = tensor # (N, 1, 4096, 2) 
 
     def __len__(self):
         return len(self.data)
@@ -47,7 +47,7 @@ class HRRPFilter(HRRP_Dataset):
         for i in range(len(targets)):
             if targets[i] in known:
                 mask.append(i)
-                new_targets.append(known.index(targets[i]))
+                new_targets.append(known.index(targets[i])) # 标签重排
 
         self.targets = np.array(new_targets)
         mask = torch.tensor(mask).long()
@@ -56,15 +56,23 @@ class HRRPFilter(HRRP_Dataset):
 
 
 class HRRP_OSR(object):
-    def __init__(self, known, model="ConvNet", seq_len=1280, use_gpu=True, num_workers=0, batch_size=32):
-        self.train_y = pd.read_csv("train_y.csv", header=None).values.reshape(-1)
-        self.train_x = pd.read_csv("train_x.csv", header=None).values.astype(np.float32)
-        self.test_y = pd.read_csv("test_y.csv", header=None).values.reshape(-1)
-        self.test_x = pd.read_csv("test_x.csv", header=None).values.astype(np.float32)
+    def __init__(self, known, model="NSRFF", seq_len=4096, use_gpu=True, num_workers=0, batch_size=32):
+  
+        data_dir = Path(__file__).resolve().parent.parent
+
+        train_y_path = data_dir / "train_y.csv"
+        train_x_path = data_dir / "train_x.csv"
+        test_y_path = data_dir / "test_y.csv"
+        test_x_path = data_dir / "test_x.csv"
+
+        self.train_y = pd.read_csv(train_y_path, header=None).values.reshape(-1)
+        self.train_x = pd.read_csv(train_x_path, header=None).values.astype(np.float32)
+        self.test_y = pd.read_csv(test_y_path, header=None).values.reshape(-1)
+        self.test_x = pd.read_csv(test_x_path, header=None).values.astype(np.float32)
 
         self.num_classes = len(known)
         self.known = known
-        self.unknown = list(set(list(range(0, 10))) - set(known))
+        self.unknown = list(set(list(range(0, 4))) - set(known))
 
         pin_memory = True if use_gpu else False
         kwargs = dict(model=model, seq_len=seq_len)
@@ -90,8 +98,8 @@ class HRRP_OSR(object):
         self.test_loader = DataLoader(
             testset,
             batch_size=batch_size,
-            drop_last=True,
-            shuffle=True,
+            drop_last = True,
+            shuffle = True,
             pin_memory=pin_memory,
             num_workers=num_workers,
         )
@@ -99,8 +107,8 @@ class HRRP_OSR(object):
         self.out_loader = DataLoader(
             outset,
             batch_size=batch_size,
-            drop_last=True,
-            shuffle=True,
+            drop_last = True,
+            shuffle = True,
             pin_memory=pin_memory,
             num_workers=num_workers,
         )

@@ -6,6 +6,7 @@ import numpy as np
 from collections import defaultdict
 
 
+
 def train(net, criterion, optimizer, trainloader, epoch=None, **options):
 
     net.train()
@@ -29,7 +30,7 @@ def train(net, criterion, optimizer, trainloader, epoch=None, **options):
         losses.update(loss.item(), labels.size(0))
 
         if (batch_idx+1) % options['print_freq'] == 0:
-            print("Batch {}/{}\t Loss {:.6f} ({:.6f})" \
+            print("Batch {}/{}\t train_Loss_val:{:.6f} train_loss_avg:{:.6f}" \
                   .format(batch_idx+1, len(trainloader), losses.val, losses.avg))
             # len(trainloader) 返回的是 trainloader 中包含的批次数（即迭代次数）
         loss_all += losses.avg

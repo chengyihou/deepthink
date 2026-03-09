@@ -46,25 +46,34 @@ class BaseCLF2(nn.Module):
     def __init__(self, in_channels=2, out_dim=1, d=4):
         super().__init__()
         self.main_module = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=d, kernel_size=(3, 3), stride=1, padding=(1, 1)),
+            nn.Conv2d(in_channels=in_channels, out_channels=d, kernel_size=(3, 3), stride=1, padding=(1, 1)), # 64 64
             nn.BatchNorm2d(d),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(in_channels=d, out_channels=d * 2, kernel_size=(3, 3), stride=1, padding=(1, 1)),
+
+            nn.Conv2d(in_channels=d, out_channels=d * 2, kernel_size=(3, 3), stride=2, padding=(1, 1)),# 32 32
             nn.BatchNorm2d(d * 2),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(in_channels=d * 2, out_channels=d * 4, kernel_size=(3, 3), stride=2, padding=(1, 1)),
+
+            nn.Conv2d(in_channels=d * 2, out_channels=d * 4, kernel_size=(3, 3), stride=2, padding=(1, 1)), # 16 16
             nn.BatchNorm2d(d * 4),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(in_channels=d * 4, out_channels=d * 8, kernel_size=(3, 3), stride=1, padding=(1, 1)),
+
+            nn.Conv2d(in_channels=d * 4, out_channels=d * 8, kernel_size=(3, 3), stride=2, padding=(1, 1)), # 8 8
             nn.BatchNorm2d(d * 8),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(in_channels=d * 8, out_channels=d * 16, kernel_size=(3, 3), stride=2, padding=(1, 1)),
+
+            nn.Conv2d(in_channels=d * 8, out_channels=d * 16, kernel_size=(3, 3), stride=2, padding=(1, 1)), # 4 4
             nn.BatchNorm2d(d * 16),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(in_channels=d * 16, out_channels=d * 32, kernel_size=(3, 3), stride=2, padding=(1, 1)),
+
+            nn.Conv2d(in_channels=d * 16, out_channels=d * 32, kernel_size=(3, 3), stride=2, padding=(1, 1)), # 2 2
             nn.BatchNorm2d(d * 32),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(in_channels=d * 32, out_channels=out_dim, kernel_size=(2, 10), stride=1, padding=(0, 0)),
+            
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Conv2d(in_channels=d * 32, out_channels=out_dim, kernel_size=1, stride=1, padding=0),
+
+            # nn.Conv2d(in_channels=d * 32, out_channels=out_dim, kernel_size=(2, 2), stride=1, padding=(0, 0)),
         )
 
     def forward(self, x):
@@ -72,15 +81,15 @@ class BaseCLF2(nn.Module):
 
     def features(self, x):
         n, _, t, _ = x.shape
-        if t != 1280:
-            raise ValueError(f"NS-RFF expects T=1280, got T={t}.")
-        x_img = x.view(n, 1, t, 2).permute(0, 3, 1, 2).flatten().view(n, -1, 16, 80)
+        if t != 4096:
+            raise ValueError(f"NS-RFF expects T=4096, got T={t}.")
+        x_img = x.view(n, 1, t, 2).permute(0, 3, 1, 2).flatten().view(n, -1, 64, 64)
         return self.main_module(x_img).view(n, -1)
 
 
 
 class Synchronization(nn.Module):
-    def __init__(self, d=4, process_sampling_rate=16000):
+    def __init__(self, d=4, process_sampling_rate=122880000):
         super().__init__()
         self.freq_estimation = BaseCLF2(2, out_dim=1, d=d)
         self.phase_estimation = BaseCLF2(2, out_dim=1, d=d)

@@ -19,7 +19,7 @@ def test_1(net, criterion, testloader, outloader, epoch=None, **options):
     out_x = []
 
     with torch.no_grad():
-        for data, labels in testloader:
+        for batch_idx, (data, labels) in enumerate(testloader):
             if options["use_gpu"]:
                 data, labels = data.cuda(), labels.cuda()
             x, y = net(data, True)
@@ -31,6 +31,11 @@ def test_1(net, criterion, testloader, outloader, epoch=None, **options):
             labels_testloader.append(labels.data.cpu().numpy())
             test_x.append(x.data.cpu())
             test_loss.update(loss.item(), labels.size(0))
+
+            if (batch_idx+1) % options['print_freq'] == 0:
+                    print("Batch {}/{}\t test_Loss_val:{:.6f} test_loss_avg:{:.6f}" \
+                        .format(batch_idx+1, len(testloader), test_loss.val, test_loss.avg))
+                    # len(testloader) 返回的是 testloader 中包含的批次数（即迭代次数）
             loss_all += test_loss.avg
 
         for data, labels in outloader:
@@ -42,6 +47,8 @@ def test_1(net, criterion, testloader, outloader, epoch=None, **options):
             logits_outloader.append(logits.data.cpu().numpy())
             labels_outloader.append(oodlabel.data.cpu().numpy())
             out_x.append(x.cpu())
+
+            
 
     test_x = torch.cat(test_x, dim=0)
     out_x = torch.cat(out_x, dim=0)

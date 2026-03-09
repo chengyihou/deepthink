@@ -9,6 +9,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 
+from pathlib import Path
 from torch.optim import lr_scheduler
 from eval import test_1
 from HRRP_OSR import HRRP_OSR
@@ -39,8 +40,8 @@ parser.add_argument("--num-centers", type=int, default=1)
 # Model
 parser.add_argument("--weight-pl", type=float, default=0.15)
 parser.add_argument("--beta", type=float, default=0.1)
-parser.add_argument("--model", type=str, default="ConvNet", choices=["ConvNet", "NSRFF"])
-parser.add_argument("--seq-len", type=int, default=1280)
+parser.add_argument("--model", type=str, default="NSRFF", choices=["ConvNet", "NSRFF"])
+parser.add_argument("--seq-len", type=int, default=4096)
 parser.add_argument("--d1", type=int, default=8)
 parser.add_argument("--d2", type=int, default=24)
 parser.add_argument("--z-dim", type=int, default=512)
@@ -158,8 +159,8 @@ def main_worker(options):
 
     # Optimizer and Scheduler
     params_list = [{"params": net.parameters()}, {"params": criterion.parameters()}]
-    optimizer = torch.optim.SGD(params_list, lr=options["lr"], momentum=0.9, weight_decay=1e-4)
-    scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60, 90, 120])
+    optimizer = torch.optim.SGD(params_list, lr=options["lr"], momentum=0.9, weight_decay=5e-4)
+    scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[15, 30, 45, 120])
 
 
 
@@ -170,7 +171,7 @@ def main_worker(options):
         print(f"==> Epoch {epoch + 1}/{options['max_epoch']}")
         train(net, criterion, optimizer, trainloader, epoch, **options)
 
-        if epoch >= 20:
+        if epoch >= 3:
             results = test_1(net, criterion, testloader, outloader, epoch=epoch, **options)
         save_networks(net, model_path, file_name, criterion=criterion)
         
@@ -185,14 +186,18 @@ def main_worker(options):
     return results
 
 
+
 if __name__ == "__main__":
     args = parser.parse_args()
     options = vars(args)
 
-    n = 5
-    numbers = list(range(10))
-    known = random.sample(numbers, n)
-    unknown = list(set(list(range(0, 10))) - set(known))
+    # n = 3
+    # numbers = list(range(4))
+    # known = random.sample(numbers, n)
+    # unknown = list(set(list(range(0, 4))) - set(known))
+    
+    known = [0, 1, 2]
+    unknown = [3]
     options.update({"known": known, "unknown": unknown})
 
     dir_name = f"{options['model']}_{options['loss']}"
