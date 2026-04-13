@@ -12,7 +12,7 @@ import numpy as np
 
 from pathlib import Path
 from torch.optim import lr_scheduler
-from eval import test_1, test_center_Dist
+from eval import test_1, test_center_Dist, test_center_Dist_thr_from_train
 from HRRP_OSR import HRRP_OSR
 from models import ConvNet
 from models_NS_RFF import NS_CLF_Softmax  
@@ -231,10 +231,10 @@ def main_worker(options):
     results = None
     for epoch in range(options["max_epoch"]):
         print(f"==> Epoch {epoch + 1}/{options['max_epoch']}")
-        _, centers = train_center_Dist(net, criterion, optimizer, trainloader, epoch, **options)
+        _, centers, thr_train = train_center_Dist(net, criterion, optimizer, trainloader, epoch, **options)
         auroc = np.nan   # 1
         if epoch >= 3:
-            results = test_center_Dist(net, criterion, testloader, outloader, centers = centers, epoch=epoch, **options)
+            results = test_center_Dist_thr_from_train(net, criterion, testloader, outloader, centers = centers, thr = thr_train, epoch=epoch, **options)
             auroc = results["AUROC"]
         auroc_history.append({
         "epoch": epoch + 1,

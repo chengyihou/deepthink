@@ -6,6 +6,10 @@ import numpy as np
 from collections import defaultdict
 
 
+# ============================================================
+# 1. 基础的概率训练
+# ============================================================
+
 
 def train(net, criterion, optimizer, trainloader, epoch=None, **options):
 
@@ -39,6 +43,10 @@ def train(net, criterion, optimizer, trainloader, epoch=None, **options):
     return loss_all / len(trainloader) 
 
 
+# ============================================================
+# 2. 基础的余弦距离训练
+# ============================================================
+
 
 def train_center_Dist(net, criterion, optimizer, trainloader, epoch=None, **options):
 
@@ -69,7 +77,7 @@ def train_center_Dist(net, criterion, optimizer, trainloader, epoch=None, **opti
         loss_all += losses.avg
     # 循环终止
 
-    centers = compute_epoch_centers(
+    centers, thr = compute_epoch_centers(
             net=net,
             trainloader=trainloader,
             num_classes=options["num_classes"],
@@ -82,9 +90,11 @@ def train_center_Dist(net, criterion, optimizer, trainloader, epoch=None, **opti
         np.savetxt("centers.csv", centers.detach().cpu().numpy(), delimiter=",", fmt="%.8f")
         print(f"centers saved to centers.csv at epoch {current_epoch}")
 
-    return loss_all / len(trainloader), centers
+    return loss_all / len(trainloader), centers, thr
 
-
+# ============================================================
+# 3. 类均值的计算公式
+# ============================================================
 
 def compute_epoch_centers(net, trainloader, num_classes, feat_dim, use_gpu):
     # C 已知类别数，D 特征维度  
@@ -111,8 +121,30 @@ def compute_epoch_centers(net, trainloader, num_classes, feat_dim, use_gpu):
 
     class_counts = class_counts.clamp_min(1.0).unsqueeze(1)   # (C, 1)
     centers = class_sums / class_counts
-    centers = F.normalize(centers, p=2, dim=1)
-
-    return centers
+    centers = F.normalize(centers, p=2, dim=1) # 返回的已经是归一化的类中心了
 
 
+    # 得阈值方法
+    train_dists = []
+    with torch.no_grad():
+        for data, labels in trainloader:
+            if use_gpu:
+                data = data.cuda()
+                labels = labels.cuda()
+
+            feats, _ = net(data, True)
+            feats = F.normalize(feats, p=2, dim=1)
+            matched_centers = centers[labels]
+            sim = torch.sum(feats * matched_centers, dim=1)
+            dist = 1.0 - sim
+            train_dists.append(dist.detach().cpu().numpy())
+
+    all_train_dists = np.concatenate(train_dists, axis=0)
+    train_thr = float(np.quantile(all_train_dists, 0.95))
+
+    return centers, train_thr
+
+
+# ============================================================
+# 4. 基础的余弦距离训练（返回阈值）
+# ============================================================
