@@ -20,6 +20,7 @@ def freq_compensation(segment, freq, PROCESS_SAMPLING_RATE):
     n, segment_length = segment.shape[0], segment.shape[1]
     index = torch.arange(segment_length, device=segment.device, dtype=segment.dtype).view(1, -1)
     phase = freq.view(n, 1) * (2.0 * math.pi / PROCESS_SAMPLING_RATE) * index
+    #                            2πfΔt = 2πf * (n / Fs) = 2πf * n / Fs  
     rotator = _complex_exp(phase).view(n, segment_length, 2)
     return _complex_mul(segment, rotator)
 

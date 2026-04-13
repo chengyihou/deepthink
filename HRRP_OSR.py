@@ -12,13 +12,12 @@ class HRRP_Dataset(Dataset):
         self.transform = transform
         self.model = model
         self.seq_len = seq_len # length
-
         tensor = torch.from_numpy(data).float()   # data shape: (N, 8192)
 
         if model == "NSRFF":
-            real = tensor[:, :seq_len]            # (N, 4096)
-            imag = tensor[:, seq_len:]            # (N, 4096)
-            tensor = torch.stack([real, imag], dim=-1)   # (N, 4096, 2)
+            real = tensor[:, :seq_len]                  # (N, 4096)
+            imag = tensor[:, seq_len:]                  # (N, 4096)
+            tensor = torch.stack([real, imag], dim=-1)  # (N, 4096, 2)
             tensor = tensor.unsqueeze(1)                # (N, 1, 4096, 2)
         else:
             tensor = tensor.unsqueeze(1)
@@ -59,6 +58,7 @@ class HRRP_OSR(object):
     def __init__(self, known, model="NSRFF", seq_len=4096, use_gpu=True, num_workers=0, batch_size=32):
   
         data_dir = Path(__file__).resolve().parent.parent
+        # data_dir = Path("./data")
 
         train_y_path = data_dir / "train_y.csv"
         train_x_path = data_dir / "train_x.csv"
@@ -70,20 +70,26 @@ class HRRP_OSR(object):
         self.test_y = pd.read_csv(test_y_path, header=None).values.reshape(-1)
         self.test_x = pd.read_csv(test_x_path, header=None).values.astype(np.float32)
 
+        # self.num_classes = len(known) # 规定的已知类别数量
+        # self.known = known
+        # self.unknown = list(set(list(range(0, 4))) - set(known))
+
+
         self.num_classes = len(known)
         self.known = known
-        self.unknown = list(set(list(range(0, 4))) - set(known))
+        self.unknown = [x for x in range(4) if x not in known]
 
         pin_memory = True if use_gpu else False
-        kwargs = dict(model=model, seq_len=seq_len)
 
-        trainset = HRRPFilter(self.train_x, self.train_y, **kwargs)
-        trainset.__filter__(known)
+        kwargs = dict(model = model, seq_len = seq_len)
 
-        testset = HRRPFilter(self.test_x, self.test_y, **kwargs)
-        testset.__filter__(known)
+        trainset = HRRPFilter(self.train_x, self.train_y, model=model, seq_len=seq_len)
+        trainset.__filter__(self.known)
 
-        outset = HRRPFilter(self.test_x, self.test_y, **kwargs)
+        testset = HRRPFilter(self.test_x, self.test_y, model=model, seq_len=seq_len)
+        testset.__filter__(self.known)
+
+        outset = HRRPFilter(self.test_x, self.test_y, model=model, seq_len=seq_len)
         outset.__filter__(self.unknown)
 
         self.train_loader = DataLoader(
