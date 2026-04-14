@@ -12,7 +12,7 @@ import numpy as np
 
 from pathlib import Path
 from torch.optim import lr_scheduler
-from eval import test_1, test_center_Dist, test_center_Dist_thr_from_train
+from eval import test_openmax, load_openmax_stats
 from HRRP_OSR import HRRP_OSR
 from models import ConvNet
 from models_NS_RFF import NS_CLF_Softmax  
@@ -20,7 +20,7 @@ from models_NS_RFF import NS_CLF_L2Softmax
 from models_NS_RFF import NS_CLF_ResNet_L2Softmax
 from plot import plot_tsne_by_class
 from plot import plot_features_2d_by_class
-from train import train, train_center_Dist, compute_epoch_centers
+from train import train, train_center_Dist, compute_epoch_centers, fit_openmax_stats
 from utils import load_networks, save_networks
 
 parser = argparse.ArgumentParser("Training")
@@ -45,7 +45,7 @@ parser.add_argument("--num-centers", type=int, default=1)
 # Model
 parser.add_argument("--weight-pl", type=float, default=0.15)
 parser.add_argument("--beta", type=float, default=0.1)
-parser.add_argument("--model", type=str, default="NSRFF", choices=["ConvNet", "NSRFF"])
+parser.add_argument("--model", type=str, default="ConvNet", choices=["ConvNet", "NSRFF"])
 parser.add_argument("--seq-len", type=int, default=4096)
 parser.add_argument("--d1", type=int, default=8) # 通道
 parser.add_argument("--d2", type=int, default=24)
@@ -72,7 +72,7 @@ def build_model(options):
     if options["model"] == "NSRFF":
         net = NS_CLF_ResNet_L2Softmax(
             # out_channels=options["num_classes"],
-            out_channels = 3,
+            out_channels=options["num_classes"], # 不要写死
             d1=options["d1"], # ??? 
             d2=options["d2"],
             z_dim=options["z_dim"],
@@ -157,25 +157,32 @@ def main_worker(options):
     # Evaluation
     if options["eval"]:
         net, criterion = load_networks(net, model_path, file_name, criterion=criterion)
-        centers = torch.tensor(np.loadtxt("centers.csv", delimiter=","),
-        dtype=torch.float32
-    )
-        results = test_center_Dist(net, criterion, testloader, outloader, centers=centers, epoch=0, **options)
+        stats = load_openmax_stats("openmax_stats.npz")
+        results = test_openmax(
+            net,
+            criterion,
+            testloader,
+            outloader,
+            stats=stats,
+            alpha=3,
+            **options,
+        )
+        print(
+            "Acc (%): {:.3f}\t F1 Macro (%): {:.3f}\t".format(
+                results["acc"], results["f1_macro"]
+            )
+        )
         # plot_features_2d_by_class(
         #     results["test_x"],
         #     results["out_x"],
         #     options["known"],
         #     results["labels_testloader"],
         # ) # 直接的2维特征可视化，
-        plot_tsne_by_class(                                                                          
+        plot_tsne_by_class(  # test_x/out_x/labels_testloader 需要                                                                 
             results["test_x"],
             results["out_x"],
             options["known"],
             results["labels_testloader"],
-        )
-
-        print(
-            "Acc (%): {:.3f}\t AUROC (%): {:.3f}\t".format(results["acc"], results["AUROC"])
         )
         return results
 
@@ -200,61 +207,44 @@ def main_worker(options):
 
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[15, 30, 45, 120], gamma=0.5)
 
+    # Training and Evaluation
 
-
-    # # Training and Evaluation -------------prob
-    # start_time = time.time()
-    # results = None
-    # for epoch in range(options["max_epoch"]):
-    #     print(f"==> Epoch {epoch + 1}/{options['max_epoch']}")
-    #     train(net, criterion, optimizer, trainloader, epoch, **options)
-
-    #     if epoch >= 3:
-    #         results = test_1(net, criterion, testloader, outloader, epoch=epoch, **options)
-    #     save_networks(net, model_path, file_name, criterion=criterion)
-        
-    #     if options["stepsize"] > 0:
-    #         scheduler.step()
-
-    # if results is None:
-    #     results = test_1(net, criterion, testloader, outloader, epoch=options["max_epoch"], **options)
-
-    # elapsed = str(datetime.timedelta(seconds=round(time.time() - start_time)))
-    # print(f"Finished. Total elapsed time (h:m:s): {elapsed}")
-    # return results
-
-
-
-    # Training and Evaluation -------------distance
     start_time = time.time()
-    auroc_history = []
     results = None
+
     for epoch in range(options["max_epoch"]):
         print(f"==> Epoch {epoch + 1}/{options['max_epoch']}")
-        _, centers, thr_train = train_center_Dist(net, criterion, optimizer, trainloader, epoch, **options)
-        auroc = np.nan   # 1
-        if epoch >= 3:
-            results = test_center_Dist_thr_from_train(net, criterion, testloader, outloader, centers = centers, thr = thr_train, epoch=epoch, **options)
-            auroc = results["AUROC"]
-        auroc_history.append({
-        "epoch": epoch + 1,
-        "AUROC": auroc
-        })
+        _ = train(net, criterion, optimizer, trainloader, epoch, **options)
+
         save_networks(net, model_path, file_name, criterion=criterion)
-        
+
         if options["stepsize"] > 0:
             scheduler.step()
 
-    if results is None:
-        results = test_1(net, criterion, testloader, outloader, epoch=options["max_epoch"], **options)
+    fit_openmax_stats(
+        net=net,
+        trainloader=trainloader,
+        num_classes=options["num_classes"],
+        use_gpu=options["use_gpu"],
+        save_path="openmax_stats.npz",
+        tailsize=20,
+        min_fit_samples=5,
+    )
 
-    np.savetxt("centers.csv", centers.detach().cpu().numpy(), delimiter=",", fmt="%.8f")
-    auroc_csv_path = os.path.join(dir_path, f"{options['dataset']}_auroc_per_epoch.csv")
-    pd.DataFrame(auroc_history).to_csv(auroc_csv_path, index=False, encoding="utf-8-sig")
+    stats = load_openmax_stats("openmax_stats.npz")
+    results = test_openmax(
+        net,
+        criterion,
+        testloader,
+        outloader,
+        stats=stats,
+        alpha=3,
+        **options,
+    )
+
     elapsed = str(datetime.timedelta(seconds=round(time.time() - start_time)))
     print(f"Finished. Total elapsed time (h:m:s): {elapsed}")
     return results
-
 
 
 if __name__ == "__main__":

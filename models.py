@@ -113,7 +113,7 @@ class ConvNet(torch.nn.Module): # 64 用0.01    2 用低一点 0.005或更低
 
         self.apply(weights_init)
 
-    def forward(self, x, rf=False, labels=None):
+    def forward(self, x, rf = False, labels = None):
         x = self.encoder(x)          # (B, 128, 1)
         x = x.view(x.size(0), -1)    # 或 torch.flatten(x, 1)
         x = self.dr(x)
