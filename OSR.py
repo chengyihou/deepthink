@@ -80,7 +80,6 @@ def build_model(options):
             arc_m=options["arc_m"],
         )
         feat_dim = options["z_dim"] # 特征维度
-
         # net = NS_CLF_Softmax(
         #     in_channels=3,
         #     out_channels=3,
@@ -190,13 +189,12 @@ def main_worker(options):
 
     # Optimizer and Scheduler
     params_list = [{"params": net.parameters()}, {"params": criterion.parameters()}]
-
     optimizer = torch.optim.SGD(
     params_list, 
     lr=options["lr"], 
     momentum=0.9, 
     weight_decay=5e-4
-    ) # sgd
+    ) 
 
     # optimizer = torch.optim.Adam( 
     # params_list,
@@ -207,8 +205,9 @@ def main_worker(options):
 
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[15, 30, 45, 120], gamma=0.5)
 
-    # Training and Evaluation
 
+
+    # Training and Evaluation
     start_time = time.time()
     results = None
 
