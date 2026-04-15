@@ -90,8 +90,10 @@ def build_model(options):
         # feat_dim = options["z_dim"] # 特征维度
 
     else:
-        net = ConvNet(num_classes=options["num_classes"])
-        feat_dim = 64
+        net = ConvNet(
+            num_classes = 3,
+            feat_dim = options["z_dim"],
+            )
     return net, feat_dim
 
 

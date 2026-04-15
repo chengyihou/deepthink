@@ -7,6 +7,22 @@ import torch.nn.init as init
 
 
 
+
+# 输入数据的归一化
+class NormalizedModel(nn.Module):
+    def __init__(self) -> None:
+        super(NormalizedModel, self).__init__()
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor: # 正态标准化
+        # mean = input.mean(dim=2, keepdim=True).repeat(1, 1, 1280, 1)
+        # std = input.std(dim=2, keepdim=True).repeat(1, 1, 1280, 1)
+        mean = input.mean()
+        std = input.std()
+        normalized_input = (input - mean)/std
+        return normalized_input
+
+
+
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels):
         super(ResidualBlock, self).__init__()
@@ -42,85 +58,57 @@ def weights_init(m):
 
 
 
+
 class ConvNet(torch.nn.Module): # 64 用0.01    2 用低一点 0.005或更低
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, feat_dim, d = 4, in_channel = 2):
         # 假设输入32，1，101
         super().__init__()
 
-        self.conv1 = nn.Conv1d(1, 32, 9, 1, padding=4,bias=False)
-        self.bn1 = nn.BatchNorm1d(32)
-        self.relu1 = nn.LeakyReLU(0.2)
-        self.conv2 = nn.Conv1d(32, 32, 9, 1, padding=4,bias=False)
-        self.bn2 = nn.BatchNorm1d(32)
-        self.relu2 = nn.LeakyReLU(0.2)
-        self.mx2 = nn.MaxPool1d(2,2)
+        self.main_module = nn.Sequential(
+            NormalizedModel(),
+            nn.Conv2d(in_channels=in_channel, out_channels=d,      kernel_size=(3, 3), stride=1, padding=(1, 1)), # 64 64
+            nn.BatchNorm2d(d),
+            nn.LeakyReLU(0.2),
 
+            nn.Conv2d(in_channels=d,           out_channels =d * 2, kernel_size=(3, 3), stride=2, padding=(1, 1)),# 32 32
+            nn.BatchNorm2d(d * 2),
+            nn.LeakyReLU(0.2),
 
-        self.conv3 = nn.Conv1d(32, 64, 9, 1, padding=4,bias=False)
-        self.bn3 = nn.BatchNorm1d(64)
-        self.relu3 = nn.LeakyReLU(0.2) # (32,64,25)
-        self.conv4 = nn.Conv1d(64, 64, 9, 1, padding=4, bias=False)
-        self.bn4 = nn.BatchNorm1d(64)
-        self.relu4 = nn.LeakyReLU(0.2)  # (32,64,25)
-        self.mx4 = nn.MaxPool1d(kernel_size=2, stride=2)
+            nn.Conv2d(in_channels=d * 2,       out_channels =d * 4, kernel_size=(3, 3), stride=2, padding=(1, 1)), # 16 16
+            nn.BatchNorm2d(d * 4),
+            nn.LeakyReLU(0.2),
 
+            nn.Conv2d(in_channels=d * 4,       out_channels =d * 8, kernel_size=(3, 3), stride=2, padding=(1, 1)), # 8 8
+            nn.BatchNorm2d(d * 8),
+            nn.LeakyReLU(0.2),
 
-        self.conv5 = nn.Conv1d(64, 128, 9, 1, padding=4, bias=False)
-        self.bn5 = nn.BatchNorm1d(128)
-        self.relu5 = nn.LeakyReLU(0.2)  # (32,64,25)
-        self.conv6 = nn.Conv1d(128, 128, 9, 1, padding=4, bias=False)
-        self.bn6 = nn.BatchNorm1d(128)
-        self.relu6 = nn.LeakyReLU(0.2)  # (32,64,25)
-        self.mx6 = nn.MaxPool1d(kernel_size=2, stride=2)
+            nn.Conv2d(in_channels=d * 8,       out_channels=d * 16, kernel_size=(3, 3), stride=2, padding=(1, 1)), # 4 4
+            nn.BatchNorm2d(d * 16),
+            nn.LeakyReLU(0.2),
 
-
-        self.dr = nn.Dropout(0.3)
-        self.mx_all = nn.AdaptiveMaxPool1d(1)
-        self.fc1 = nn.Linear(128, 64) # 512 到 128
-        self.fc2 = nn.Linear(64,num_classes)
-
-        self.encoder = nn.Sequential(
-            self.conv1,
-            self.bn1,
-            self.relu1,
-
-            self.conv2,
-            self.bn2,
-            self.relu2,
-            self.mx2,
-
-            self.conv3,
-            self.bn3,
-            self.relu3,
-
-            self.conv4,
-            self.bn4,
-            self.relu4,
-            self.mx4,
-
-            self.conv5,
-            self.bn5,
-            self.relu5,
-
-            self.conv6,
-            self.bn6,
-            self.relu6,
-            self.mx6,
-
-            self.mx_all,
+            # nn.Conv2d(in_channels=d * 16, out_channels=d * 32, kernel_size=(3, 3), stride=2, padding=(1, 1)), # 2 2
+            # nn.BatchNorm2d(d * 32),
+            # nn.LeakyReLU(0.2),
+            
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(16 * d, feat_dim)  # 按照 4096 来算的话，out_dim 就是特征维度
         )
-
-
+        self.fc_classifier = nn.Linear(feat_dim, num_classes)
         self.apply(weights_init)
 
-    def forward(self, x, rf = False, labels = None):
-        x = self.encoder(x)          # (B, 128, 1)
-        x = x.view(x.size(0), -1)    # 或 torch.flatten(x, 1)
-        x = self.dr(x)
-        feat = self.fc1(x)
-        y = self.fc2(feat)
+    def forward(self, x, rf=False, labels=None):
+        
+        feat = self.features(x)
+        y = self.fc_classifier(feat)
 
         return (feat, y) if rf else y
     
-
-
+    def features(self, x):
+        n, _, t, _ = x.shape
+        if t != 4096:
+            raise ValueError(f"NS-RFF expects T=4096, got T={t}.")
+        x_img = x.view(n, 1, t, 2).permute(0, 3, 1, 2).flatten().view(n, -1, 64, 64)
+        return self.main_module(x_img).view(n, -1)
+    
+    
